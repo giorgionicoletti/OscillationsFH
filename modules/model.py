@@ -274,3 +274,151 @@ def find_quenched_return_times(Nrep, N, Nsteps, dt, cov0, mux0, muy0,
         
     return t
 
+@nb.njit
+def simulate_pulse_Fitzugh_Nagumo(N, Nsteps, dt, x0, y0, theta = 0.001,
+                                  pulse_val = 0., pulse_start = 0, pulse_end = 0,
+                                  mu = 1, muHat = 1, delta = -1/3,
+                                  muI = 0.6, epsilon = 0.5, alpha = 0.1,
+                                  beta = 0.8, gamma = 0.7, sigma = 0.1):
+    """
+    Simulate the Fitzugh-Nagumo model with additive noise. A pulse is given
+    to all oscillators at a given time. An extra parameter theta is added
+    to the x population to account for a repulsive interaction from the mean.
+
+    Parameters
+    ----------
+    N : int
+        Number of neurons in the x population.
+    Nsteps : int
+        Number of time steps to simulate.
+    dt : float
+        Time step size.
+    x0 : array
+        Initial condition for the x population.
+    y0 : array
+        Initial condition for the y population.
+    theta : float
+        Interaction strength between the x population and
+        the mean of the x population, repulsive.
+    pulse_val : float
+        Value of the pulse.
+    pulse_start : int
+        Time step at which the pulse starts.
+    pulse_end : int
+        Time step at which the pulse ends.
+    epsilon : float
+        Interaction strength between the x population and
+        the mean of the x population.
+    mu : float
+        Self-coupling of the x population.
+    muHat : float
+        Coupling from the y to the x population.
+    delta : float
+        Nonlinearity of the x population.
+    muI : float
+        External input to the x population.
+    alpha : float
+        Coupling from the x to the y population.
+    beta : float
+        Self-coupling of the y population.
+    gamma : float
+        External input to the y population.
+    sigma : float
+        Noise level.
+
+    Returns
+    -------
+    x : array
+        Simulated x population.
+    y : array
+        Simulated y population.
+    """
+
+    x = np.zeros((Nsteps, N), dtype=np.float64)
+    y = np.zeros((Nsteps, N), dtype=np.float64)
+
+    x[0] = x0
+    y[0] = y0
+    sqdt = np.sqrt(dt)
+
+    pulse = np.zeros(Nsteps, dtype=np.float64)
+    pulse[pulse_start:pulse_end] = pulse_val
+
+    for t in range(1, Nsteps):
+        m = np.mean(x[t-1])
+        x[t] = x[t-1] + dt * (mu*x[t-1] + delta*x[t-1]**3 - muHat*y[t-1] + muI + epsilon*m + theta*(x[t-1] - m) + pulse[t])
+        x[t] += sigma*sqdt*np.random.randn(N)
+
+        y[t] = y[t-1] + dt * alpha*(x[t-1] - beta*y[t-1] + gamma + pulse[t])
+        y[t] += sigma*sqdt*np.random.randn(N)
+
+    return x, y
+
+
+
+@nb.njit
+def simulate_repulsive_Fitzugh_Nagumo(N, Nsteps, dt, x0, y0, k, epsilon,
+                                      mu = 1, muHat = 1, delta = -1/3,
+                                      muI = 0.6, alpha = 0.1,
+                                      beta = 0.8, gamma = 0.7, sigma = 0.1):
+    """
+    Simulate the Fitzugh-Nagumo model with additive noise. A repulsive
+    interaction is added to the x population.
+
+    Parameters
+    ----------
+    N : int
+        Number of neurons in the x population.
+    Nsteps : int
+        Number of time steps to simulate.
+    dt : float
+        Time step size.
+    x0 : array
+        Initial condition for the x population.
+    y0 : array
+        Initial condition for the y population.
+    k : float
+        Repulsive interaction strength.
+    epsilon : float
+        Interaction strength between the x population and
+        the mean of the x population.
+    mu : float
+        Self-coupling of the x population.
+    muHat : float
+        Coupling from the y to the x population.
+    delta : float
+        Nonlinearity of the x population.
+    muI : float
+        External input to the x population.
+    alpha : float
+        Coupling from the x to the y population.
+    beta : float
+        Self-coupling of the y population.
+    gamma : float
+        External input to the y population.
+    sigma : float
+        Noise level.
+
+    Returns
+    -------
+    x : array
+        Simulated x population.
+    y : array
+        Simulated y population.
+    """
+
+    x = np.zeros((Nsteps, N), dtype=np.float64)
+    y = np.zeros((Nsteps, N), dtype=np.float64)
+
+    x[0] = x0
+    y[0] = y0
+    sqdt = np.sqrt(dt)
+
+    for t in range(1, Nsteps):
+        x[t] = x[t-1] + dt * (mu*x[t-1] + delta*x[t-1]**3 - muHat*y[t-1] + muI + epsilon*np.mean(x[t-1]) + k*utils.difference_all_points(x[t-1]))
+        x[t] += sigma*sqdt*np.random.randn(N)
+
+        y[t] = y[t-1] + dt * alpha*(x[t-1] - beta*y[t-1] + gamma)
+        y[t] += sigma*sqdt*np.random.randn(N)
+
+    return x, y

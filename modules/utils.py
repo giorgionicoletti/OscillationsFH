@@ -2,6 +2,8 @@ import numpy as np
 import numba as nb
 
 from scipy.spatial import ConvexHull, Delaunay
+import matplotlib.pyplot as plt
+
 
 def estimate_baricenter(x, y):
     """
@@ -179,3 +181,28 @@ def plot_results(x, y, Time, title, idxs_to_plot = [-7500, -5000, -2500, -1], No
     plt.subplots_adjust(wspace=0.3)
 
     return fig, ax
+
+@nb.njit
+def difference_all_points(x, reg = 0.1):
+    """
+    Computes the difference between all points in x.
+
+    Parameters
+    ----------
+    x : array
+        Array of points.
+    reg : float
+        Regularization parameter.
+
+    Returns
+    -------
+    diff : array
+        Array of differences.
+    """
+    N = x.shape[0]
+    diff = np.zeros(N, dtype=np.float64)
+    for i in range(N):
+        for j in range(N):
+            if j != i:
+                diff[i] += 1/(reg + np.abs(x[i] - x[j]))
+    return diff
