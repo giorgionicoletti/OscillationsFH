@@ -3,6 +3,29 @@ import numba as nb
 
 import utils
 
+def equations(p, *args):
+    """
+    Fitzugh-Nagumo equations.
+
+    Parameters
+    ----------
+    p : array
+        Population state.
+    args : tuple
+        Parameters of the model.
+
+    Returns
+    -------
+    dxdt : float
+        Time derivative of the x population.
+    dydt : float
+        Time derivative of the y population.
+    """
+    mu, muHat, delta, muI, epsilon, alpha, beta, gamma = args
+    x, y = p
+    return (mu + epsilon)*x + delta*x**3 - muHat*y + muI, alpha*(x - beta*y + gamma)
+
+
 @nb.njit
 def simulate_Fitzugh_Nagumo(N, Nsteps, dt, x0, y0,
                             epsilon,
@@ -209,6 +232,9 @@ def simulate_quenched_return_FH(Nsteps, dt, x0, y0,
             break
 
     return t*dt, x, y
+
+
+
 
 @nb.njit(parallel = True)
 def find_quenched_return_times(Nrep, N, Nsteps, dt, cov0, mux0, muy0,
@@ -422,3 +448,114 @@ def simulate_repulsive_Fitzugh_Nagumo(N, Nsteps, dt, x0, y0, k, epsilon,
         y[t] += sigma*sqdt*np.random.randn(N)
 
     return x, y
+
+
+
+
+##############################
+# FUNCTIONS FOR RETURN TIMES #
+##############################
+
+@nb.njit
+def simulate_return_single_FH(Nsteps, dt, x0, y0,
+                              epsilon, xcycle, ycycle, tol = 1e-3,
+                              mu = 1, muHat = 1, delta = -1/3,
+                              muI = 0.6, alpha = 0.1,
+                              beta = 0.8, gamma = 0.7, sigma = 0.1):
+    
+    N = len(x0)
+    x = x0
+    y = y0
+    sqdt = np.sqrt(dt)
+    
+    t_return = np.zeros(N, dtype = np.float64)
+    returned = 0
+
+    for t in range(1, Nsteps):
+        xnew = x + dt * (mu*x + delta*x**3 - muHat*y + muI + epsilon*np.mean(x)) + sigma*sqdt*np.random.randn(N)
+        ynew = y + dt * alpha*(x - beta*y + gamma) + sigma*sqdt*np.random.randn(N)
+
+        for i in range(N):
+            if t_return[i] == 0:
+                dist_cycle = utils.distance_from_cycle(xnew[i], ynew[i], xcycle, ycycle)
+                if dist_cycle < tol:
+                    t_return[i] = t*dt
+                    returned += 1
+
+        if returned != N:
+            x = xnew
+            y = ynew
+        else:
+            break
+
+    return t_return
+
+
+
+@nb.njit(parallel = True)
+def find_return_times_single(Nrep, N, Nsteps, dt, cov0, mux0, muy0,
+                             epsilon, xcycle, ycycle, tol = 1e-3,
+                             mu = 1, muHat = 1, delta = -1/3,
+                             muI = 0.6, alpha = 0.1,
+                             beta = 0.8, gamma = 0.7, sigma = 0.1):
+    
+    t = np.zeros((Nrep, N), dtype=np.float64)
+    
+    for idx in nb.prange(Nrep):
+        x0, y0 = utils.sample_multivariate_normal(np.array([mux0, muy0]), cov0, N)
+        t[idx] = simulate_return_single_FH(Nsteps, dt, x0, y0,
+                                           epsilon, xcycle, ycycle, tol,
+                                           mu = mu, muHat = muHat, delta = delta,
+                                           muI = muI, alpha = alpha,
+                                           beta = beta, gamma = gamma, sigma = sigma)
+        
+    return t
+
+
+
+@nb.njit
+def simulate_return_FH_mean(Nsteps, dt, x0, y0,
+                            epsilon, xcycle, ycycle, tol = 1e-3,
+                            mu = 1, muHat = 1, delta = -1/3,
+                            muI = 0.6, alpha = 0.1,
+                            beta = 0.8, gamma = 0.7, sigma = 0.1):
+
+    N = len(x0)
+    x = x0
+    y = y0
+    sqdt = np.sqrt(dt)
+    
+    for t in range(1, Nsteps):
+        xnew = x + dt * (mu*x + delta*x**3 - muHat*y + muI + epsilon*np.mean(x)) + sigma*sqdt*np.random.randn(N)
+        ynew = y + dt * alpha*(x - beta*y + gamma) + sigma*sqdt*np.random.randn(N)
+
+        dist_cycle = utils.distance_from_cycle(np.mean(xnew), np.mean(ynew), xcycle, ycycle)
+
+        if dist_cycle > tol:
+            x = xnew
+            y = ynew
+        else:
+            break
+
+    return t*dt, x, y
+
+
+
+@nb.njit(parallel = True)
+def find_return_times_mean(Nrep, N, Nsteps, dt, cov0, mux0, muy0,
+                           epsilon, xcycle, ycycle, tol = 1e-3,
+                           mu = 1, muHat = 1, delta = -1/3,
+                           muI = 0.6, alpha = 0.1,
+                           beta = 0.8, gamma = 0.7, sigma = 0.1):
+    
+    t = np.zeros(Nrep)
+    
+    for idx in nb.prange(Nrep):
+        x0, y0 = utils.sample_multivariate_normal(np.array([mux0, muy0]), cov0, N)
+        t[idx], _, _ = simulate_return_FH_mean(Nsteps, dt, x0, y0,
+                                               epsilon, xcycle, ycycle, tol,
+                                               mu = mu, muHat = muHat, delta = delta,
+                                               muI = muI, alpha = alpha,
+                                               beta = beta, gamma = gamma, sigma = sigma)
+        
+    return t

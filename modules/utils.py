@@ -4,6 +4,7 @@ import numba as nb
 from scipy.spatial import ConvexHull, Delaunay
 import matplotlib.pyplot as plt
 
+import scipy.signal
 
 def estimate_baricenter(x, y):
     """
@@ -84,10 +85,11 @@ def sample_multivariate_normal(mean, cov, size):
     N = mean.shape[0]
     A = np.linalg.cholesky(cov)
     Z = np.random.randn(N, size)
-    return A @ Z + mean[:, None]
+    
+    return A @ Z + np.expand_dims(mean, axis = 1)
 
 
-def find_cov_slow(x, y, eps = 0.001):
+def find_cov_slow(x, y, eps = 0.001, return_idxs = False):
     """
     Computes the covarance matrix between x and y 
     along the low-variance slow branch of the limit cycle.
@@ -114,8 +116,10 @@ def find_cov_slow(x, y, eps = 0.001):
         cov += np.cov(x[t, :], y[t, :])
 
     cov /= len(idxs)
-
-    return cov
+    if return_idxs:
+        return cov, idxs
+    else:
+        return cov
 
 
 def plot_results(x, y, Time, title, idxs_to_plot = [-7500, -5000, -2500, -1], Nosc_to_plot = 100, steps_to_plot = 10000):
@@ -206,3 +210,34 @@ def difference_all_points(x, reg = 0.1):
             if j != i:
                 diff[i] += 1/(reg + np.abs(x[i] - x[j]))
     return diff
+
+def interpolate_cycle(xmean, ymean, order = 200, plot_check = False):
+    minima_idxs = scipy.signal.argrelextrema(xmean, np.less, order = order)[0]
+
+    if plot_check:
+        plt.scatter(minima_idxs, xmean[minima_idxs], color = 'darkred', zorder = 10)
+        plt.plot(xmean, color = 'black', alpha = 0.5)
+        plt.plot(ymean, color = 'black', alpha = 0.5)
+        plt.show()
+    
+    cycles = []
+    for i in range(len(minima_idxs) - 1):
+        cycles.append((xmean[minima_idxs[i]:minima_idxs[i+1]], ymean[minima_idxs[i]:minima_idxs[i+1]]))
+
+    cycle_length = np.mean([len(cycle[0]) for cycle in cycles])
+    xcycle_avg = np.zeros(int(cycle_length))
+    ycycle_avg = np.zeros(int(cycle_length))
+    for cycle in cycles:
+        xcycle_avg += scipy.signal.resample(cycle[0], int(cycle_length))
+        ycycle_avg += scipy.signal.resample(cycle[1], int(cycle_length))
+    xcycle_avg /= len(cycles)
+    ycycle_avg /= len(cycles)
+
+    if plot_check:
+        plt.scatter(xcycle_avg, ycycle_avg, color = 'darkred', s = 1, zorder = 10)
+        plt.plot(xmean, ymean, ls = '--')
+        plt.show()
+
+    return xcycle_avg, ycycle_avg
+
+
