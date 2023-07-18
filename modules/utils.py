@@ -6,6 +6,21 @@ import matplotlib.pyplot as plt
 
 import scipy.signal
 
+from sympy import solve
+from sympy.abc import x, y
+
+
+def find_fixed_points(IQ, epsilon, mu = 1, muHat = 1, delta = -1/3,
+                      muI = 0.6, alpha = 0.1,
+                      beta = 0.8, gamma = 0.7, sigma = 0.1):
+    N = len(IQ)
+    xy_UNST_Q = np.zeros((N, 3, 2), dtype=np.complex128)
+
+    for idx, curr_I in enumerate(IQ):
+        xy_UNST_Q[idx] = solve([(mu + epsilon)*x + delta*x**3 - muHat*y + curr_I, x - beta*y + gamma], x, y)
+
+    return xy_UNST_Q
+
 def estimate_baricenter(x, y):
     """
     Finds the baricenter of a trajectory in the x-y plane.
