@@ -104,7 +104,7 @@ def sample_multivariate_normal(mean, cov, size):
     return A @ Z + np.expand_dims(mean, axis = 1)
 
 
-def find_cov_slow(x, y, eps = 0.001, return_idxs = False):
+def find_cov_slow(x, y, th = 0.001, return_idxs = False):
     """
     Computes the covarance matrix between x and y 
     along the low-variance slow branch of the limit cycle.
@@ -123,7 +123,7 @@ def find_cov_slow(x, y, eps = 0.001, return_idxs = False):
     cov : array
         Covariance matrix between x and y.
     """
-    idxs = np.where(np.var(x, axis = 1) < eps)[0]
+    idxs = np.where(np.var(x, axis = 1) < th)[0]
 
     cov = np.zeros((2, 2), dtype = np.float64)
 
